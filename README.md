@@ -12,6 +12,8 @@ Example:
 
 ## Installation
 
+Install [`graphviz`](https://graphviz.org/download/) for your operating system.
+
 Check out this repository and run:
 
 ```
