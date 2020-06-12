@@ -138,7 +138,6 @@ func render(out io.Writer,
 	regionsToServices map[*runv1.Location][]*runv1.Service,
 	permissionsMap map[ServiceRecord][]string) {
 
-
 	svcAccountsToTargets := make(map[string][]ServiceRecord)
 	for svc, callers := range permissionsMap {
 		for _, c := range callers {
@@ -153,13 +152,6 @@ func render(out io.Writer,
 	}
 
 	p(`digraph G {`)
-	//p(`  subgraph accounts {`)
-	//p(`    rankdir="TB";`)
-	//for acct := range svcAccounts {
-	//	p(`"%s"[label = "%s",shape=box];`, acct, acct)
-	//}
-	//p(`  }`)
-
 	for region, svcs := range regionsToServices {
 			p("  subgraph %s {", regionName(region.LocationId))
 			p("  style=dashed;")
@@ -193,13 +185,6 @@ func render(out io.Writer,
 			}
 		}
 	}
-	//for svc, callers := range permissionsMap {
-	//	nodeName := svcNode(svc.Service, svc.Region.LocationId)
-	//
-	//	for _, acct := range callers {
-	//		p(`"%s" -> "%s" [label ="can invoke",color=red];`, acct, nodeName)
-	//	}
-	//}
 	p("}")
 }
 
