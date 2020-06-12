@@ -8,7 +8,7 @@ services.
 
 Example:
 
-![](assets/example.png)
+![](assets/example.svg)
 
 ## Installation
 

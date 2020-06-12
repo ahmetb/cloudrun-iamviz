@@ -182,7 +182,6 @@ func render(out io.Writer,
 			sa := s.Spec.Template.Spec.ServiceAccountName
 			targets := svcAccountsToTargets[sa]
 
-
 			for _, target := range targets {
 				permissionsURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/permissions?project=%s",
 					target.Region.LocationId, target.Metadata.Name, target.Metadata.Namespace)
