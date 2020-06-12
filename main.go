@@ -113,12 +113,13 @@ func do(_ *cobra.Command, _ []string) error {
 	// convert to svg
 	// TODO the following /dev devices won't work on windows
 	cmd := exec.Command("dot", "-Tsvg", "-o", "/dev/stdout", "/dev/stdin")
+	var stderr bytes.Buffer
 	cmd.Stdin = &b
+	cmd.Stderr = &stderr
 
 	svgout, err := cmd.Output()
 	if err != nil {
-		// TODO print stderr from dot
-		return errors.Wrap(err, "failed to convert dot")
+		return errors.Wrapf(err, "failed to convert svg, dot error output:\n%s", string(stderr.Bytes()))
 	}
 	log.Printf("converted to svg successfully")
 
