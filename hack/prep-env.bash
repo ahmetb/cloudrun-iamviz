@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+region="${REGION:=us-central1}"
+
 function create_svc_account {
-  name="${1:-name not specified}"
-
-  gcloud iam service-accounts create "$name" 1>/dev/null \
-    || true
-
-  local proj
+  local proj name email
   proj="$(gcloud config get-value core/project -q)"
-  echo "${name}@${proj}.iam.gserviceaccount.com"
+  if [[ -z "$proj" ]]; then
+    echo >&2 "could not determine project from gcloud"
+    exit 1
+  fi
+
+
+  name="${1:-name not specified}"
+  email="${name}@${proj}.iam.gserviceaccount.com"
+
+  if ! gcloud iam service-accounts describe "$email" 1>/dev/null 2>&1; then
+    gcloud iam service-accounts create "$name" 1>/dev/null
+    echo "$(tput setaf 2)Created SA ${email}.$(tput sgr0)"
+  else
+    echo >&2 "SA ${email} already exists."
+  fi
+  echo "$email"
 }
 
 function create_cloud_run_service {
@@ -18,7 +30,7 @@ function create_cloud_run_service {
 
   gcloud run deploy "$name" \
     --platform=managed \
-    --region=us-central1 \
+    --region="$region" \
     --image=gcr.io/cloudrun/hello \
     --service-account "${svc_account}" -q 1>/dev/null
 
@@ -30,9 +42,11 @@ function give_permission {
   svc="${2:-service not specified}"
 
   gcloud run services add-iam-policy-binding \
-    "$svc" --platform=managed --region=us-central1 \
+    "$svc" --platform=managed --region="${region}" \
     --member="serviceAccount:${svc_account}" \
     --role=roles/run.invoker 1>/dev/null
+
+  echo "$(tput setaf 2)Added ${svc_account} binding to ${svc}$(tput sgr0)"
 }
 
 acct1=$(create_svc_account "test-acct-1")
