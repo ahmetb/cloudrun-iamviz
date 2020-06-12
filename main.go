@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"log"
@@ -136,9 +137,12 @@ func render(out io.Writer,
 	regionsToServices map[*runv1.Location][]*runv1.Service,
 	permissionsMap map[ServiceRecord][]string) {
 
-	svcAccounts := make(map[string]bool)
-	for svc := range permissionsMap {
-		svcAccounts[svc.Spec.Template.Spec.ServiceAccountName] = true
+
+	svcAccountsToTargets := make(map[string][]ServiceRecord)
+	for svc, callers := range permissionsMap {
+		for _, c := range callers {
+			svcAccountsToTargets[c] = append(svcAccountsToTargets[c], svc)
+		}
 	}
 
 	p := func(f string, vals ...interface{}) { fmt.Fprintf(out, f+"\n", vals...) }
@@ -148,42 +152,54 @@ func render(out io.Writer,
 	}
 
 	p(`digraph G {`)
-	p(`  subgraph accounts {`)
-	p(`    rankdir="TB";`)
-	for acct := range svcAccounts {
-		p(`"%s"[label = "%s",shape=box];`, acct, acct)
-	}
-	p(`  }`)
+	//p(`  subgraph accounts {`)
+	//p(`    rankdir="TB";`)
+	//for acct := range svcAccounts {
+	//	p(`"%s"[label = "%s",shape=box];`, acct, acct)
+	//}
+	//p(`  }`)
 
 	for region, svcs := range regionsToServices {
-		{
 			p("  subgraph %s {", regionName(region.LocationId))
-			p("  style=filled;")
-			p("  color=lightgrey;")
-			p("  node [style=filled,color=cadetblue2];")
+			p("  style=dashed;")
+			p("  node [style=filled,shape=box];")
 			p(`  label = "%s (%s)";`, region.LocationId, region.DisplayName)
-
 			for _, s := range svcs {
+				svcURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/revisions?project=%s",
+					region.LocationId, s.Metadata.Name, s.Metadata.Namespace)
+
 				nodeName := svcNode(s, region.LocationId)
-				p(`    "%s"[label="%s"];`, nodeName, s.Metadata.Name) // service node
+				color := colorFor(s.Metadata.Name)
+				p(`    "%s"[href="%s",color=%s,label = <%s<br/><font point-size='9'>%s</font>> ];`,
+					nodeName, svcURL, color, s.Metadata.Name, s.Spec.Template.Spec.ServiceAccountName) // service node
 			}
 			p("  }")
-		}
 	}
 
 	for region, svcs := range regionsToServices {
 		for _, s := range svcs {
-			nodeName := svcNode(s, region.LocationId)
-			p(`"%s" -> "%s" [label ="uses",color=blue];`, nodeName, s.Spec.Template.Spec.ServiceAccountName)
-		}
-	}
-	for svc, callers := range permissionsMap {
-		nodeName := svcNode(svc.Service, svc.Region.LocationId)
 
-		for _, acct := range callers {
-			p(`"%s" -> "%s" [label ="can invoke",color=red];`, acct, nodeName)
+			sa := s.Spec.Template.Spec.ServiceAccountName
+			targets := svcAccountsToTargets[sa]
+
+
+			for _, target := range targets {
+				permissionsURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/permissions?project=%s",
+					target.Region.LocationId, target.Metadata.Name, target.Metadata.Namespace)
+
+				p(`"%s" -> "%s" [href="%s"];`,
+					svcNode(s, region.LocationId),
+					svcNode(target.Service, target.Region.LocationId), permissionsURL)
+			}
 		}
 	}
+	//for svc, callers := range permissionsMap {
+	//	nodeName := svcNode(svc.Service, svc.Region.LocationId)
+	//
+	//	for _, acct := range callers {
+	//		p(`"%s" -> "%s" [label ="can invoke",color=red];`, acct, nodeName)
+	//	}
+	//}
 	p("}")
 }
 
@@ -317,4 +333,27 @@ func openInBrowser(url string) error {
 	default:
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
+}
+
+
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
+func colorFor(s string) string {
+	colors := []string{ // http://www.graphviz.org/doc/info/colors.html
+		`coral1`,
+		`cadetblue`,
+		`gold2`,
+		`aquamarine2`,
+		`lightpink`,
+		`lightsalmon`,
+		`springgreen`,
+		`wheat1`,
+		`lavender`,
+		`chartreuse`,
+	}
+	return colors[int(hash(s))%len(colors)]
 }
