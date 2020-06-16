@@ -152,6 +152,7 @@ func render(out io.Writer,
 	}
 
 	p(`digraph G {`)
+	p(`  graph[splines="ortho";nodesep=1;]`)
 	for region, svcs := range regionsToServices {
 			p("  subgraph %s {", regionName(region.LocationId))
 			p("  style=dashed;")
