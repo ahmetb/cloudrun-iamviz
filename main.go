@@ -122,10 +122,14 @@ func do(_ *cobra.Command, _ []string) error {
 	}
 	log.Printf("converted to svg successfully")
 
-	fp := filepath.Join(os.TempDir(), "iamviz.svg") // TODO add random name
-	if err := ioutil.WriteFile(fp, svgout, 0644); err != nil {
+	f, err := ioutil.TempFile(os.TempDir(), "iamviz.*.svg")
+	if err != nil {
+		return errors.Wrap(err, "failed to create temp file")
+	}
+	if _, err := f.Write(svgout); err != nil {
 		return errors.Wrap(err, "failed to write to temp file")
 	}
+	fp := f.Name()
 
 	log.Printf("written file to: %s", fp)
 	log.Printf("launching in browser...")
