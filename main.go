@@ -105,7 +105,6 @@ func do(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-
 	var b bytes.Buffer
 	mw := io.MultiWriter(&b, os.Stdout)
 	render(mw, regionToServicesMap, servicePermissions)
@@ -123,15 +122,22 @@ func do(_ *cobra.Command, _ []string) error {
 	}
 	log.Printf("converted to svg successfully")
 
-	fp := filepath.Join(os.TempDir(),"iamviz.svg") // TODO add random name
+	fp := filepath.Join(os.TempDir(), "iamviz.svg") // TODO add random name
 	if err := ioutil.WriteFile(fp, svgout, 0644); err != nil {
 		return errors.Wrap(err, "failed to write to temp file")
 	}
 
 	log.Printf("written file to: %s", fp)
 	log.Printf("launching in browser...")
-	url := "file://"+filepath.ToSlash(fp)
+	url := "file://" + filepath.ToSlash(fp)
 	return openInBrowser(url)
+}
+
+func serviceAccountDisplayText(email string) string {
+	if strings.HasSuffix(email, ".iam.gserviceaccount.com") {
+		return strings.TrimSuffix(email, ".iam.gserviceaccount.com") + "..."
+	}
+	return email
 }
 
 func render(out io.Writer,
@@ -152,22 +158,37 @@ func render(out io.Writer,
 	}
 
 	p(`digraph G {`)
-	p(`  graph[splines="ortho";nodesep=1;]`)
+	p(`  graph[splines="curved";nodesep=1;]`)
 	for region, svcs := range regionsToServices {
-			p("  subgraph %s {", regionName(region.LocationId))
-			p("  style=dashed;")
-			p("  node [style=filled,shape=box];")
-			p(`  label = "%s (%s)";`, region.LocationId, region.DisplayName)
-			for _, s := range svcs {
-				svcURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/revisions?project=%s",
-					region.LocationId, s.Metadata.Name, s.Metadata.Namespace)
+		p("  subgraph %s {", regionName(region.LocationId))
+		p("  style=dashed;")
+		p("  node [style=filled,shape=box];")
+		p(`  label = "%s (%s)";`, region.LocationId, region.DisplayName)
+		for _, s := range svcs {
+			svcURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/revisions?project=%s",
+				region.LocationId, s.Metadata.Name, s.Metadata.Namespace)
 
-				nodeName := svcNode(s, region.LocationId)
-				color := colorFor(s.Metadata.Name)
-				p(`    "%s"[href="%s",color=%s,label = <%s<br/><font point-size='9'>%s</font>> ];`,
-					nodeName, svcURL, color, s.Metadata.Name, s.Spec.Template.Spec.ServiceAccountName) // service node
+			nodeName := svcNode(s, region.LocationId)
+			color := colorFor(s.Metadata.Name)
+			p(`    "%s"[href="%s",color=%s,label = <%s<br/><font point-size='9'>%s</font>> ];`,
+				nodeName, svcURL, color, s.Metadata.Name,
+				serviceAccountDisplayText(s.Spec.Template.Spec.ServiceAccountName)) // service node
+		}
+		p("  }")
+	}
+
+	// if allUsers binding exists, add a node
+	publicServicesExist := false
+	for _, members := range permissionsMap {
+		for _, member := range members {
+			if member == "allUsers" {
+				publicServicesExist = true
+				break
 			}
-			p("  }")
+		}
+	}
+	if publicServicesExist {
+		p(`    allUsers[style=dashed,shape=oval];`)
 	}
 
 	for region, svcs := range regionsToServices {
@@ -186,6 +207,16 @@ func render(out io.Writer,
 			}
 		}
 	}
+
+	if publicServicesExist {
+		targets := svcAccountsToTargets["allUsers"]
+		for _, target := range targets {
+			permissionsURL := fmt.Sprintf("https://console.cloud.google.com/run/detail/%s/%s/permissions?project=%s",
+				target.Region.LocationId, target.Metadata.Name, target.Metadata.Namespace)
+			p(`"allUsers" -> "%s" [href="%s"];`, svcNode(target.Service, target.Region.LocationId), permissionsURL)
+		}
+	}
+
 	p("}")
 }
 
@@ -299,7 +330,9 @@ func queryPermissionsForSvc(client *runv1.APIService, svc ServiceRecord) ([]stri
 
 			for _, m := range binding.Members {
 				p := strings.SplitN(m, ":", 2)
-				if len(p) > 1 {
+				if m == "allUsers" || m == "allAuthenticatedUsers" {
+					members = append(members, m)
+				} else if len(p) > 1 {
 					members = append(members, p[1])
 				}
 			}
@@ -320,7 +353,6 @@ func openInBrowser(url string) error {
 		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
 	}
 }
-
 
 func hash(s string) uint32 {
 	h := fnv.New32a()
