@@ -138,6 +138,9 @@ func do(_ *cobra.Command, _ []string) error {
 }
 
 func serviceAccountDisplayText(email string) string {
+	if strings.HasSuffix(email, "-compute@developer.gserviceaccount.com") {
+		return "Compute default service account"
+	}
 	if strings.HasSuffix(email, ".iam.gserviceaccount.com") {
 		return strings.TrimSuffix(email, ".iam.gserviceaccount.com") + "..."
 	}
@@ -192,7 +195,7 @@ func render(out io.Writer,
 		}
 	}
 	if publicServicesExist {
-		p(`    allUsers[style=dashed,shape=oval];`)
+		p(`    allUsers[style=dashed,shape=oval, label = "Public Internet"];`)
 	}
 
 	for region, svcs := range regionsToServices {
